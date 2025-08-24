@@ -1,295 +1,323 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
-import { toast } from "react-toastify";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { useProducts } from "../../context/ProductContext";
-
-// ✅ Validation Schema
-const schema = yup.object().shape({
-  name: yup.string().required("Product name is required"),
-  description: yup.string().required("Description is required"),
-  category: yup.string().required("Category is required"),
-  price: yup
-    .number()
-    .typeError("Price must be a number")
-    .positive("Price must be greater than 0")
-    .required("Price is required"),
-  discount: yup
-    .number()
-    .typeError("Discount must be a number")
-    .min(0, "Discount cannot be less than 0")
-    .max(100, "Discount cannot exceed 100")
-    .nullable(),
-});
+import { toast } from 'react-toastify';
+import { useParams, useNavigate } from 'react-router-dom';
 
 const UpdateProduct = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { triggerRefresh } = useProducts();
-
-  const [existingImages, setExistingImages] = useState([]);
-  const [newImages, setNewImages] = useState([]);
-  const [imagePreviews, setImagePreviews] = useState([]);
-  const [colors, setColors] = useState([]);
-  const [sizes, setSizes] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-    setValue,
-    getValues,
-  } = useForm({
-    resolver: yupResolver(schema),
-    defaultValues: {
-      name: "",
-      description: "",
-      category: "",
-      subCategory: "",
-      price: "",
-      discount: "",
-      bestseller: false,
-      isShow: true,
-      colors: [],
-      sizes: [],
-    },
+  
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    category: "",
+    subCategory: "",
+    price: "",
+    discount: "",
+    bestseller: false,
+    isShow: true,
+    colors: [],
+    sizes: [],
+    quantity: 1,
+    stock: "inStock",
   });
 
-  // ✅ Fetch product details
+  const [images, setImages] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetchingProduct, setFetchingProduct] = useState(true);
+  const [originalImages, setOriginalImages] = useState([]);
+
+  // Fetch product data when component mounts
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const response = await axios.put(
-          `http://localhost:5000/products/update/${id}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
+        setFetchingProduct(true);
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          toast.error('You must be logged in to update products.');
+          navigate('/login');
+          return;
+        }
+
+        const response = await axios.get(`http://localhost:5000/products/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
           }
-        );
-
-        const data = response.data;
-        console.log("Fetched product data:", data);
-
-        // Set form values
-        reset({
-          name: data.name || "",
-          description: data.description || "",
-          category: data.category || "",
-          subCategory: data.subCategory || "",
-          price: data.price || "",
-          discount: data.discount || "",
-          bestseller: data.bestseller || false,
-          isShow: data.isShow !== false, // default to true if not specified
         });
 
-        // Set colors and sizes
-        if (data.colors && Array.isArray(data.colors)) {
-          setColors(data.colors);
-        }
+        const product = response.data.product;
         
-        if (data.sizes && Array.isArray(data.sizes)) {
-          setSizes(data.sizes);
+        if (!product) {
+          toast.error('Product not found');
+          navigate('/products');
+          return;
         }
 
-        // Set images
-        if (data.images && Array.isArray(data.images)) {
-          setExistingImages(data.images);
+        // Set form data with product details
+        setForm({
+          name: product.name || "",
+          description: product.description || "",
+          category: product.category || "",
+          subCategory: product.subCategory || "",
+          price: product.price?.toString() || "",
+          discount: product.discount?.toString() || "0",
+          bestseller: product.bestseller || false,
+          isShow: product.isShow !== false, // Default to true if not explicitly false
+          colors: Array.isArray(product.colors) ? product.colors : [],
+          sizes: Array.isArray(product.sizes) ? product.sizes : [],
+          quantity: product.quantity || 1,
+          stock: product.stock || "inStock",
+        });
+
+        // Set original images
+        if (Array.isArray(product.images) && product.images.length > 0) {
+          setOriginalImages(product.images);
+          
+          // Create preview URLs for existing images
+          const previews = product.images.map(url => url);
+          setImagePreviews(previews);
         }
+
+        console.log('Product data loaded:', product);
+        
       } catch (error) {
-        console.error("Error fetching product:", error);
-        toast.error("Failed to fetch product details");
-        navigate("/all");
+        console.error('Error fetching product:', error);
+        toast.error('Failed to load product data');
+        
+        if (error.response?.status === 401) {
+          navigate('/login');
+        }
+      } finally {
+        setFetchingProduct(false);
       }
     };
 
-    if (id) fetchProduct();
-  }, [id, reset, navigate]);
+    if (id) {
+      fetchProduct();
+    }
+  }, [id, navigate]);
 
-  // Handle colors and sizes
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setForm({
+      ...form,
+      [name]: type === "checkbox" ? checked : value,
+    });
+  };
+
+  // Fixed Dynamic input for colors and sizes
   const handleAddTag = (e, field) => {
     if (e.key === "Enter") {
       e.preventDefault();
       const value = e.target.value.trim();
       
-      if (field === "colors") {
-        if (value && !colors.includes(value)) {
-          setColors([...colors, value]);
-          e.target.value = "";
-        } else if (value) {
-          toast.warning(`${value} is already added to colors`);
-        }
-      } else if (field === "sizes") {
-        if (value && !sizes.includes(value)) {
-          setSizes([...sizes, value]);
-          e.target.value = "";
-        } else if (value) {
-          toast.warning(`${value} is already added to sizes`);
-        }
+      if (value && !form[field].includes(value)) {
+        const updatedArray = [...form[field], value];
+        setForm(prevForm => ({ 
+          ...prevForm, 
+          [field]: updatedArray 
+        }));
+        e.target.value = ""; // Clear input after adding
+      } else if (value && form[field].includes(value)) {
+        toast.warning(`${value} is already added to ${field}`);
       }
     }
   };
 
+  // Improved remove tag function
+  const handleRemoveTag = (field, index) => {
+    const updatedArray = form[field].filter((_, i) => i !== index);
+    setForm(prevForm => ({
+      ...prevForm,
+      [field]: updatedArray,
+    }));
+  };
+
+  // Add a manual add function as backup
   const handleManualAdd = (field) => {
     const inputId = `${field}-input`;
     const input = document.getElementById(inputId);
     const value = input.value.trim();
     
-    if (field === "colors") {
-      if (value && !colors.includes(value)) {
-        setColors([...colors, value]);
-        input.value = "";
-        toast.success(`${value} added to colors`);
-      } else if (value) {
-        toast.warning(`${value} is already added to colors`);
-      }
-    } else if (field === "sizes") {
-      if (value && !sizes.includes(value)) {
-        setSizes([...sizes, value]);
-        input.value = "";
-        toast.success(`${value} added to sizes`);
-      } else if (value) {
-        toast.warning(`${value} is already added to sizes`);
-      }
+    if (value && !form[field].includes(value)) {
+      const updatedArray = [...form[field], value];
+      setForm(prevForm => ({ 
+        ...prevForm, 
+        [field]: updatedArray 
+      }));
+      input.value = ""; // Clear input
+      toast.success(`${value} added to ${field}`);
+    } else if (value && form[field].includes(value)) {
+      toast.warning(`${value} is already added to ${field}`);
+    } else {
+      toast.error(`Please enter a valid ${field.slice(0, -1)}`);
     }
   };
 
-  const handleRemoveTag = (field, index) => {
-    if (field === "colors") {
-      setColors(colors.filter((_, i) => i !== index));
-    } else if (field === "sizes") {
-      setSizes(sizes.filter((_, i) => i !== index));
-    }
-  };
-
-  // ✅ Handle new image uploads
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      setNewImages([...newImages, ...files]);
+      setImages([...images, ...files]);
       
       // Create previews
       const newPreviews = files.map((file) => URL.createObjectURL(file));
-      setImagePreviews([...imagePreviews, ...newPreviews]);
+      
+      // Add new previews to existing ones
+      setImagePreviews(prev => [...prev, ...newPreviews]);
     }
   };
 
   const handleRemoveImage = (index) => {
-    const newImages = newImages.filter((_, i) => i !== index);
+    // Check if this is an original image or a newly added one
+    if (index < originalImages.length) {
+      // This is an original image
+      const newOriginalImages = originalImages.filter((_, i) => i !== index);
+      setOriginalImages(newOriginalImages);
+    } else {
+      // This is a newly added image
+      const adjustedIndex = index - originalImages.length;
+      const newImages = images.filter((_, i) => i !== adjustedIndex);
+      setImages(newImages);
+    }
+    
+    // Remove from previews
     const newPreviews = imagePreviews.filter((_, i) => i !== index);
-    
-    // Revoke the URL to free memory
-    URL.revokeObjectURL(imagePreviews[index]);
-    
-    setNewImages(newImages);
     setImagePreviews(newPreviews);
   };
 
-  const handleRemoveExistingImage = (index) => {
-    setExistingImages(existingImages.filter((_, i) => i !== index));
+  // Add this validation function before the handleSubmit function
+  const validateForm = () => {
+    const errors = [];
+    
+    if (!form.name.trim()) errors.push('Product name is required');
+    if (!form.description.trim()) errors.push('Description is required');
+    if (!form.category.trim()) errors.push('Category is required');
+    if (!form.price || parseFloat(form.price) <= 0) errors.push('Valid price is required');
+    
+    if (form.discount && (parseInt(form.discount) < 0 || parseInt(form.discount) > 100)) {
+      errors.push('Discount must be between 0 and 100');
+    }
+    
+    if (originalImages.length === 0 && images.length === 0) {
+      errors.push('At least one image is required');
+    }
+    
+    return errors;
   };
 
-  // ✅ Submit form
-  const onSubmit = async (formData) => {
+  // Update the handleSubmit function to use validation
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     setLoading(true);
+
     try {
-      const token = localStorage.getItem("token");
+      // Check if user is authenticated
+      const token = localStorage.getItem('token');
       if (!token) {
         toast.error('You must be logged in to update products.');
+        setLoading(false);
+        navigate('/login');
+        return;
+      }
+
+      // Validate form
+      const validationErrors = validateForm();
+      if (validationErrors.length > 0) {
+        validationErrors.forEach(error => toast.error(error));
         setLoading(false);
         return;
       }
 
-      const form = new FormData();
+      // Create FormData for file upload
+      const formData = new FormData();
       
-      // Append form fields
-      form.append('name', formData.name.trim());
-      form.append('description', formData.description.trim());
-      form.append('category', formData.category.trim());
-      form.append('subCategory', formData.subCategory || '');
-      form.append('price', parseFloat(formData.price));
-      form.append('discount', parseInt(formData.discount) || 0);
-      form.append('bestseller', formData.bestseller.toString());
-      form.append('isShow', formData.isShow.toString());
+      // Append form fields with proper type conversion
+      formData.append('name', form.name.trim());
+      formData.append('description', form.description.trim());
+      formData.append('category', form.category.trim());
+      formData.append('subCategory', form.subCategory.trim());
+      formData.append('price', parseFloat(form.price));
+      formData.append('discount', parseInt(form.discount) || 0);
+      formData.append('bestseller', form.bestseller.toString());
+      formData.append('isShow', form.isShow.toString());
+      formData.append('quantity', parseInt(form.quantity) || 1);
+      formData.append('stock', form.stock);
       
-      // Append colors and sizes
-      colors.forEach((color, index) => {
-        form.append(`colors[${index}]`, color);
+      // Handle colors and sizes properly
+      const colorsArray = Array.isArray(form.colors) ? form.colors : [];
+      const sizesArray = Array.isArray(form.sizes) ? form.sizes : [];
+      
+      // Append each color and size individually
+      colorsArray.forEach((color, index) => {
+        formData.append(`colors[${index}]`, color);
       });
       
-      sizes.forEach((size, index) => {
-        form.append(`sizes[${index}]`, size);
+      sizesArray.forEach((size, index) => {
+        formData.append(`sizes[${index}]`, size);
       });
       
       // Also send as JSON strings as backup
-      form.append('colorsJSON', JSON.stringify(colors));
-      form.append('sizesJSON', JSON.stringify(sizes));
+      formData.append('colorsJSON', JSON.stringify(colorsArray));
+      formData.append('sizesJSON', JSON.stringify(sizesArray));
       
-      // Append existing images
-      existingImages.forEach((img, index) => {
-        form.append(`existingImages[${index}]`, img);
-      });
+      // Append original images that weren't removed
+      formData.append('originalImages', JSON.stringify(originalImages));
       
       // Append new images
-      newImages.forEach((file) => {
-        form.append('images', file);
+      images.forEach((image, index) => {
+        formData.append(`image${index + 1}`, image);
       });
 
-      console.log("Sending update request for product ID:", id);
-      console.log("Form data being sent:", {
-        name: formData.name,
-        description: formData.description,
-        category: formData.category,
-        subCategory: formData.subCategory,
-        price: formData.price,
-        discount: formData.discount,
-        bestseller: formData.bestseller,
-        isShow: formData.isShow,
-        colors: colors,
-        sizes: sizes,
-        existingImagesCount: existingImages.length,
-        newImagesCount: newImages.length
-      });
-
-      const response = await axios.put(`http://localhost:5000/products/update/${id}`, form, {
+      // Send update request
+      const response = await axios.put(`http://localhost:5000/products/update/${id}`, formData, {
         headers: {
-          "Content-Type": "multipart/form-data",
           Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
         },
       });
-
-      console.log("Update response:", response.data);
+      
       toast.success("Product updated successfully!");
-      triggerRefresh();
-      navigate("/all");
+      console.log('Response:', response.data);
+      
+      // Navigate back to products list
+      navigate('/all');
+      
     } catch (err) {
-      console.error("Error updating product:", err);
-      console.error("Error response:", err.response?.data);
+      console.error('Error updating product:', err);
+      console.error('Error response:', err.response?.data);
       
       if (err.response?.status === 401) {
         toast.error('Authentication failed. Please login again.');
         localStorage.removeItem('token');
+        navigate('/login');
       } else if (err.response?.status === 403) {
         toast.error('You do not have permission to update products.');
-      } else if (err.response?.status === 404) {
-        toast.error('Product not found. It may have been deleted.');
+      } else if (err.response?.status === 400) {
+        const errorMessage = err.response?.data?.message || 'Invalid data provided.';
+        toast.error(errorMessage);
       } else {
-        toast.error(err.response?.data?.message || 'Failed to update product. Please try again.');
+        toast.error(err.response?.data?.message || 'Error updating product. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
+  if (fetchingProduct) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p className="ml-3 text-lg">Loading product data...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white shadow rounded">
       <h2 className="text-2xl font-bold mb-6">Update Product</h2>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Basic Information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -297,11 +325,13 @@ const UpdateProduct = () => {
               Product Name *
             </label>
             <input
-              {...register("name")}
+              type="text"
+              name="name"
+              value={form.name}
+              onChange={handleChange}
               placeholder="Enter product name"
               className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-red-500 text-sm">{errors.name?.message}</p>
           </div>
 
           <div>
@@ -309,11 +339,13 @@ const UpdateProduct = () => {
               Category *
             </label>
             <input
-              {...register("category")}
+              type="text"
+              name="category"
+              value={form.category}
+              onChange={handleChange}
               placeholder="Enter product category"
               className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-red-500 text-sm">{errors.category?.message}</p>
           </div>
         </div>
 
@@ -322,12 +354,13 @@ const UpdateProduct = () => {
             Description *
           </label>
           <textarea
-            {...register("description")}
+            name="description"
+            value={form.description}
+            onChange={handleChange}
             placeholder="Enter product description"
             rows="4"
             className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-          <p className="text-red-500 text-sm">{errors.description?.message}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -336,7 +369,10 @@ const UpdateProduct = () => {
               Sub Category
             </label>
             <input
-              {...register("subCategory")}
+              type="text"
+              name="subCategory"
+              value={form.subCategory}
+              onChange={handleChange}
               placeholder="Enter sub category"
               className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -348,13 +384,14 @@ const UpdateProduct = () => {
             </label>
             <input
               type="number"
-              {...register("price")}
+              name="price"
+              value={form.price}
+              onChange={handleChange}
               placeholder="0.00"
               min="0"
               step="0.01"
               className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-red-500 text-sm">{errors.price?.message}</p>
           </div>
 
           <div>
@@ -363,13 +400,48 @@ const UpdateProduct = () => {
             </label>
             <input
               type="number"
-              {...register("discount")}
+              name="discount"
+              value={form.discount}
+              onChange={handleChange}
               placeholder="0"
               min="0"
               max="100"
               className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-            <p className="text-red-500 text-sm">{errors.discount?.message}</p>
+          </div>
+        </div>
+
+        {/* Quantity and Stock */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Quantity
+            </label>
+            <input
+              type="number"
+              name="quantity"
+              value={form.quantity}
+              onChange={handleChange}
+              placeholder="1"
+              min="1"
+              className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Stock Status
+            </label>
+            <select
+              name="stock"
+              value={form.stock}
+              onChange={handleChange}
+              className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="inStock">In Stock</option>
+              <option value="outOfStock">Out of Stock</option>
+              <option value="lowStock">Low Stock</option>
+            </select>
           </div>
         </div>
 
@@ -378,7 +450,9 @@ const UpdateProduct = () => {
           <label className="flex items-center">
             <input
               type="checkbox"
-              {...register("bestseller")}
+              name="bestseller"
+              checked={form.bestseller}
+              onChange={handleChange}
               className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <span className="text-sm font-medium text-gray-700">Bestseller</span>
@@ -386,7 +460,9 @@ const UpdateProduct = () => {
           <label className="flex items-center">
             <input
               type="checkbox"
-              {...register("isShow")}
+              name="isShow"
+              checked={form.isShow}
+              onChange={handleChange}
               className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <span className="text-sm font-medium text-gray-700">Show Product</span>
@@ -396,11 +472,11 @@ const UpdateProduct = () => {
         {/* Colors */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Colors: ({colors.length} added)
+            Colors: ({form.colors.length} added)
           </label>
           <div className="flex gap-2 flex-wrap mb-2 min-h-[2rem]">
-            {colors.length > 0 ? (
-              colors.map((color, i) => (
+            {form.colors.length > 0 ? (
+              form.colors.map((color, i) => (
                 <span key={i} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
                   {color}
                   <button
@@ -437,11 +513,11 @@ const UpdateProduct = () => {
         {/* Sizes */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Sizes: ({sizes.length} added)
+            Sizes: ({form.sizes.length} added)
           </label>
           <div className="flex gap-2 flex-wrap mb-2 min-h-[2rem]">
-            {sizes.length > 0 ? (
-              sizes.map((size, i) => (
+            {form.sizes.length > 0 ? (
+              form.sizes.map((size, i) => (
                 <span key={i} className="flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
                   {size}
                   <button
@@ -495,16 +571,16 @@ const UpdateProduct = () => {
           <div className="mt-4">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Existing Images:</h3>
             <div className="flex flex-wrap gap-2">
-              {existingImages.map((img, i) => (
+              {originalImages.map((img, i) => (
                 <div key={`existing-${i}`} className="relative">
                   <img
-                    src={typeof img === "string" ? img : URL.createObjectURL(img)}
+                    src={img}
                     alt="existing"
                     className="h-24 w-24 object-cover rounded border"
                   />
                   <button
                     type="button"
-                    onClick={() => handleRemoveExistingImage(i)}
+                    onClick={() => handleRemoveImage(i)}
                     className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                   >
                     ×
@@ -539,7 +615,7 @@ const UpdateProduct = () => {
 
         <button
           type="submit"
-          disabled={isSubmitting || loading}
+          disabled={loading}
           className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
         >
           {loading ? (

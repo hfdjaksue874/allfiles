@@ -14,6 +14,8 @@ const AddProduct = () => {
     isShow: true,
     colors: [],
     sizes: [],
+    quantity: 1,  // Add default quantity
+    stock: "inStock", // Add default stock status
   });
 
   const [images, setImages] = useState([]);
@@ -176,6 +178,8 @@ const AddProduct = () => {
       formData.append('discount', parseInt(form.discount) || 0);
       formData.append('bestseller', form.bestseller.toString());
       formData.append('isShow', form.isShow.toString());
+      formData.append('quantity', parseInt(form.quantity) || 1); // Add quantity
+      formData.append('stock', form.stock); // Add stock status
       
       // Handle colors and sizes properly - send each item separately
       const colorsArray = Array.isArray(form.colors) ? form.colors : [];
@@ -210,6 +214,8 @@ const AddProduct = () => {
       console.log('- discount:', form.discount, 'parsed:', parseInt(form.discount) || 0);
       console.log('- bestseller:', form.bestseller, 'string:', form.bestseller.toString());
       console.log('- isShow:', form.isShow, 'string:', form.isShow.toString());
+      console.log('- quantity:', form.quantity, 'parsed:', parseInt(form.quantity) || 1);
+      console.log('- stock:', form.stock);
       console.log('- colors array:', colorsArray);
       console.log('- sizes array:', sizesArray);
       console.log('- images count:', images.length);
@@ -243,6 +249,8 @@ const AddProduct = () => {
         isShow: true,
         colors: [],
         sizes: [],
+        quantity: 1,  // Reset quantity
+        stock: "inStock", // Reset stock
       });
       
       // Clear images and previews
@@ -407,6 +415,42 @@ const AddProduct = () => {
           </label>
         </div>
 
+        {/* Add Stock and Quantity fields */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Quantity *
+            </label>
+            <input 
+              type="number" 
+              name="quantity" 
+              placeholder="Enter product quantity"
+              value={form.quantity} 
+              onChange={handleChange}
+              min="0"
+              className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+              required 
+            />
+            <p className="text-xs text-gray-500 mt-1">Number of items in stock</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Stock Status
+            </label>
+            <select
+              name="stock"
+              value={form.stock}
+              onChange={handleChange}
+              className="w-full border border-gray-300 p-3 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="inStock">In Stock</option>
+              <option value="outOfStock">Out of Stock</option>
+              <option value="limitedStock">Limited Stock</option>
+            </select>
+          </div>
+        </div>
+
         {/* Colors */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -522,7 +566,7 @@ const AddProduct = () => {
           </div>
         </div>
 
-        {/* Debug Section - Remove this after testing */}
+        {/* Debug Section - Update to include new fields */}
         <div className="bg-gray-100 p-4 rounded">
           <h3 className="font-bold mb-2">Debug Info:</h3>
           <button
@@ -537,6 +581,8 @@ const AddProduct = () => {
             <p><strong>Sizes:</strong> {JSON.stringify(form.sizes)}</p>
             <p><strong>Colors Count:</strong> {form.colors.length}</p>
             <p><strong>Sizes Count:</strong> {form.sizes.length}</p>
+            <p><strong>Quantity:</strong> {form.quantity}</p>
+            <p><strong>Stock Status:</strong> {form.stock}</p>
           </div>
         </div>
 

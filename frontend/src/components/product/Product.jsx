@@ -1,5 +1,7 @@
-import React from 'react'
+import axios from 'axios';
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { backendUrl } from '../../App';
 
 const Product = ({
   product,
@@ -10,6 +12,10 @@ const Product = ({
   onMouseLeave,
   onGoToImage,
 }) => {
+  const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
+  const [wishlistError, setWishlistError] = useState(null);
+  const [isInWishlist, setIsInWishlist] = useState(false);
+
   if (!product) return null;
 
   // Base64 encoded SVG placeholder
@@ -66,6 +72,39 @@ const Product = ({
   const stockStatus = getStockStatus(product);
   const productInStock = isInStock(product);
 
+  // Function to add product to wishlist
+  const addToWishlist = async (e) => {
+    e.preventDefault(); // Prevent Link navigation
+    
+    try {
+      setIsAddingToWishlist(true);
+      setWishlistError(null);
+      
+      // Make sure there's a forward slash between backendUrl and 'wishlist'
+      const response = await axios.post(`${backendUrl}wishlist/add`, {
+        productId: product._id,
+        // Include any other required data like userId if needed
+      }, {
+        // Include authentication headers if required
+        headers: {
+          // Example: 'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      setIsInWishlist(true);
+      console.log('Added to wishlist:', product.name);
+      
+      // Optional: Show a success toast/notification
+    } catch (error) {
+      console.error('Failed to add to wishlist:', error);
+      setWishlistError('Failed to add to wishlist');
+      
+      // Optional: Show an error toast/notification
+    } finally {
+      setIsAddingToWishlist(false);
+    }
+  };
+
   return (
     <Link to={`/products/${product._id}`} className="block group">
       <div 
@@ -120,18 +159,35 @@ const Product = ({
           {/* Wishlist Button - only show if product is in stock */}
           {productInStock && (
             <button 
-              onClick={(e) => {
-                e.preventDefault(); // Prevent Link navigation
-                // Add wishlist functionality here
-                console.log('Added to wishlist:', product.name);
-              }}
-              className="absolute top-2 right-2 p-1.5 bg-white rounded-full shadow hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
-              aria-label="Add to wishlist"
+              onClick={addToWishlist}
+              disabled={isAddingToWishlist || isInWishlist}
+              className={`absolute top-2 right-2 p-1.5 bg-white rounded-full shadow hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100 ${
+                isAddingToWishlist ? 'cursor-wait' : isInWishlist ? 'bg-pink-50' : ''
+              }`}
+              aria-label={isInWishlist ? "Added to wishlist" : "Add to wishlist"}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318 1.318a4.5 4.5 0 00-6.364 0z" />
-              </svg>
+              {isAddingToWishlist ? (
+                <svg className="h-4 w-4 text-gray-600 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : isInWishlist ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318 1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              )}
             </button>
+          )}
+          
+          {/* Error tooltip if wishlist action failed */}
+          {wishlistError && (
+            <div className="absolute top-10 right-2 bg-red-100 text-red-800 text-xs p-1 rounded shadow-md">
+              {wishlistError}
+            </div>
           )}
         </div>
         

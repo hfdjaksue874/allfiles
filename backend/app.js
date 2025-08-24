@@ -27,7 +27,8 @@ const allowedOrigins = [
   process.env.FRONTEND_URL,          // from .env if deployed
   "http://localhost:5173",           // Vite default
   "http://localhost:5174",           // If you run multiple instances
-  "http://127.0.0.1:5173"            // Sometimes browser uses 127.0.0.1
+  "http://127.0.0.1:5173",
+  "https://allfiles-f26m.vercel.app"           // Sometimes browser uses 127.0.0.1
 ].filter(Boolean); // remove undefined
 
 app.use(cors({
