@@ -1,114 +1,123 @@
-import React, { useEffect, useState, useRef } from 'react'
-import axios from 'axios'
-import { Link } from 'react-router-dom'
-import Product from '../product/Product'; // Import the Product component
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { backendUrl } from '../../App';
+import ProductGrid from '../product/ProductGrid';
+import { Filter, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react';
 
 const Collection = () => {
-  const [products, setProducts] = useState([])
-  const [displayProducts, setDisplayProducts] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [activeImageIndex, setActiveImageIndex] = useState({})
-  const imageSliders = useRef({})
-
-  const fetchProducts = async () => {
-    try {
-      // Use the same endpoint as ProductDetails.jsx
-      const response = await axios.get(`${backendUrl}products`)
-      const data = await response.data
-      console.log('Collection data:', data)
-      if (data.products && Array.isArray(data.products)) {
-        setProducts(data.products)
-        setDisplayProducts(data.products)
-      }
-      setLoading(false)
-    } catch (error) {
-      console.error('Collection fetch error:', error)
-      setError('Failed to fetch products')
-      setLoading(false)
-    }
-  }
-
-  // Updated to handle different image formats consistently with ProductDetails.jsx
-  const getAllImageUrls = (product) => {
-    try {
-      // Use 'image' property to match ProductDetails.jsx, but also check 'images'
-      const imageData = product.image || product.images;
-      
-      if (!imageData) {
-        return ['https://via.placeholder.com/400x400?text=No+Image+Available'];
-      }
-      
-      if (typeof imageData === 'string') {
-        return [imageData];
-      }
-      
-      if (imageData.url || imageData.secure_url) {
-        return [imageData.url || imageData.secure_url];
-      }
-      
-      if (Array.isArray(imageData)) {
-        return imageData.map((img) => {
-          if (typeof img === 'string') return img;
-          if (img && img.url) return img.url;
-          if (img && img.secure_url) return img.secure_url;
-          if (img && img.public_id) return `https://res.cloudinary.com/your-cloud-name/image/upload/${img.public_id}`;
-          return 'https://via.placeholder.com/400x400?text=Image+Error';
-        });
-      }
-      
-      return ['https://via.placeholder.com/400x400?text=No+Image+Available'];
-    } catch (err) {
-      console.error('Error processing image URLs:', err);
-      return ['https://via.placeholder.com/400x400?text=Image+Error'];
-    }
-  }
-
-  const getImageUrl = (product, index) => {
-    const allUrls = getAllImageUrls(product);
-    return allUrls[index] || allUrls[0] || 'https://via.placeholder.com/400x400?text=No+Image';
-  }
-
-  const startImageSlider = (productId, totalImages) => {
-    if (totalImages <= 1) return; // Don't start slider if only one image
-    
-    if (imageSliders.current[productId]) {
-      clearInterval(imageSliders.current[productId])
-    }
-    
-    imageSliders.current[productId] = setInterval(() => {
-      setActiveImageIndex(prev => ({
-        ...prev,
-        [productId]: (prev[productId] + 1) % totalImages
-      }))
-    }, 3000)
-  }
-
-  const stopImageSlider = (productId) => {
-    if (imageSliders.current[productId]) {
-      clearInterval(imageSliders.current[productId])
-      delete imageSliders.current[productId]
-    }
-  }
-
-  const goToImage = (productId, index, totalImages) => {
-    setActiveImageIndex(prev => ({
-      ...prev,
-      [productId]: index % totalImages
-    }))
-  }
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filters, setFilters] = useState({
+    category: [],
+    price: { min: 0, max: 1000 },
+    rating: 0,
+    inStock: false
+  });
+  const [sortBy, setSortBy] = useState('newest');
+  const [showFilters, setShowFilters] = useState(false);
+  const [categories, setCategories] = useState([]);
 
   useEffect(() => {
-    fetchProducts()
-    
-    // Cleanup intervals on unmount
-    return () => {
-      Object.values(imageSliders.current).forEach(interval => {
-        clearInterval(interval);
-      });
+    const fetchProducts = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`${backendUrl}products`);
+        
+        if (response.data && Array.isArray(response.data.products)) {
+          setProducts(response.data.products);
+          
+          // Extract unique categories
+          const uniqueCategories = [...new Set(
+            response.data.products
+              .map(product => product.category)
+              .filter(Boolean)
+          )];
+          
+          setCategories(uniqueCategories);
+        } else {
+          setError('Failed to load products. Please try again later.');
+        }
+      } catch (err) {
+        console.error('Error fetching products:', err);
+        setError('Failed to load products. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
     };
-  }, [])
+
+    fetchProducts();
+  }, []);
+
+  // Filter products based on selected filters
+  const filteredProducts = products.filter(product => {
+    // Category filter
+    if (filters.category.length > 0 && !filters.category.includes(product.category)) {
+      return false;
+    }
+    
+    // Price filter
+    if (product.price < filters.price.min || product.price > filters.price.max) {
+      return false;
+    }
+    
+    // Rating filter
+    if (filters.rating > 0 && (!product.rating || product.rating < filters.rating)) {
+      return false;
+    }
+    
+    // In stock filter
+    if (filters.inStock && (!product.inStock && product.quantity <= 0 && product.stock <= 0)) {
+      return false;
+    }
+    
+    return true;
+  });
+
+  // Sort products based on selected sort option
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    switch (sortBy) {
+      case 'price-low-high':
+        return (a.price || 0) - (b.price || 0);
+      case 'price-high-low':
+        return (b.price || 0) - (a.price || 0);
+      case 'rating':
+        return (b.rating || 0) - (a.rating || 0);
+      case 'oldest':
+        return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+      case 'newest':
+      default:
+        return new Date(b.createdAt || Date.now()) - new Date(a.createdAt || 0);
+    }
+  });
+
+  // Handle filter changes
+  const handleFilterChange = (filterType, value) => {
+    setFilters(prev => {
+      if (filterType === 'category') {
+        // Toggle category selection
+        const updatedCategories = prev.category.includes(value)
+          ? prev.category.filter(cat => cat !== value)
+          : [...prev.category, value];
+        
+        return { ...prev, category: updatedCategories };
+      } else if (filterType === 'price') {
+        return { ...prev, price: { ...prev.price, [value.type]: value.value } };
+      } else {
+        return { ...prev, [filterType]: value };
+      }
+    });
+  };
+
+  // Reset all filters
+  const resetFilters = () => {
+    setFilters({
+      category: [],
+      price: { min: 0, max: 1000 },
+      rating: 0,
+      inStock: false
+    });
+  };
 
   if (loading) {
     return (
@@ -130,41 +139,146 @@ const Collection = () => {
   }
 
   return (
-    <div>
-      {displayProducts.length > 0 ? (
-        <div className="container mx-auto px-4 py-8">
-          <h1 className="text-3xl font-bold mb-6">Our Products</h1>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {displayProducts.map((product) => {
-              const allImageUrls = getAllImageUrls(product)
-              const currentImageIndex = activeImageIndex[product._id] || 0
-              const currentImageUrl = getImageUrl(product, currentImageIndex)
-              
-              return (
-                <Product
-                  key={product._id}
-                  product={product}
-                  currentImageUrl={currentImageUrl}
-                  allImageUrls={allImageUrls}
-                  currentImageIndex={currentImageIndex}
-                  onMouseEnter={() => startImageSlider(product._id, allImageUrls.length)}
-                  onMouseLeave={() => stopImageSlider(product._id)}
-                  onGoToImage={(index) => goToImage(product._id, index, allImageUrls.length)}
-                />
-              )
-            })}
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <h1 className="text-3xl font-bold">Our Products</h1>
+        
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Filter className="w-4 h-4" />
+            Filters
+            {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          
+          <select 
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+            <option value="price-low-high">Price: Low to High</option>
+            <option value="price-high-low">Price: High to Low</option>
+            <option value="rating">Top Rated</option>
+          </select>
         </div>
-      ) : (
-        <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">No Products Found</h2>
-            <p className="text-gray-600">There are currently no products available.</p>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+      </div>
 
-export default Collection
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Filters Sidebar */}
+        {showFilters && (
+          <div className="lg:w-1/4 bg-white p-6 rounded-lg shadow-sm border border-gray-200 h-fit">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Filters</h2>
+              <button 
+                onClick={resetFilters}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Reset All
+              </button>
+            </div>
+            
+            {/* Categories Filter */}
+            <div className="mb-6">
+              <h3 className="font-medium mb-3">Categories</h3>
+              <div className="space-y-2">
+                {categories.map(category => (
+                  <label key={category} className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={filters.category.includes(category)}
+                      onChange={() => handleFilterChange('category', category)}
+                      className="mr-2"
+                    />
+                    <span className="capitalize">{category}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            {/* Price Range Filter */}
+            <div className="mb-6">
+              <h3 className="font-medium mb-3">Price Range</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm mb-1">Min: ${filters.price.min}</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1000"
+                    value={filters.price.min}
+                    onChange={(e) => handleFilterChange('price', { type: 'min', value: parseInt(e.target.value) })}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Max: ${filters.price.max}</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1000"
+                    value={filters.price.max}
+                    onChange={(e) => handleFilterChange('price', { type: 'max', value: parseInt(e.target.value) })}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Rating Filter */}
+            <div className="mb-6">
+              <h3 className="font-medium mb-3">Minimum Rating</h3>
+              <div className="flex gap-2">
+                {[0, 1, 2, 3, 4, 5].map(rating => (
+                  <button
+                    key={rating}
+                    onClick={() => handleFilterChange('rating', rating)}
+                    className={`px-3 py-1 rounded ${
+                      filters.rating === rating 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-200 hover:bg-gray-300'
+                    }`}
+                  >
+                    {rating === 0 ? 'All' : `${rating}+`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Stock Status Filter */}
+            <div>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={filters.inStock}
+                  onChange={(e) => handleFilterChange('inStock', e.target.checked)}
+                  className="mr-2"
+                />
+                Show Only In Stock Items
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Products Grid */}
+        <div className={`${showFilters ? 'lg:w-3/4' : 'w-full'}`}>
+          {sortedProducts.length > 0 ? (
+            <ProductGrid products={sortedProducts} />
+          ) : (
+            <div className="flex justify-center items-center min-h-[calc(100vh-8rem)]">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">No Products Found</h2>
+                <p className="text-gray-600">Try adjusting your filters to see more products.</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Collection;

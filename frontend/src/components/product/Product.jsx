@@ -1,7 +1,8 @@
-import axios from 'axios';
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { backendUrl } from '../../App';
+import axios from 'axios';
+import { Heart } from 'lucide-react';
 
 const Product = ({
   product,
@@ -15,6 +16,7 @@ const Product = ({
   const [isAddingToWishlist, setIsAddingToWishlist] = useState(false);
   const [wishlistError, setWishlistError] = useState(null);
   const [isInWishlist, setIsInWishlist] = useState(false);
+  const navigate = useNavigate();
 
   if (!product) return null;
 
@@ -76,6 +78,20 @@ const Product = ({
   const addToWishlist = async (e) => {
     e.preventDefault(); // Prevent Link navigation
     
+    // Get authentication token
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      // User is not logged in, redirect to login page
+      navigate('/login', { 
+        state: { 
+          from: window.location.pathname,
+          message: 'Please login to add items to your wishlist'
+        } 
+      });
+      return;
+    }
+    
     try {
       setIsAddingToWishlist(true);
       setWishlistError(null);
@@ -83,23 +99,44 @@ const Product = ({
       // Make sure there's a forward slash between backendUrl and 'wishlist'
       const response = await axios.post(`${backendUrl}wishlist/add`, {
         productId: product._id,
-        // Include any other required data like userId if needed
       }, {
-        // Include authentication headers if required
         headers: {
-          // Example: 'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       
-      setIsInWishlist(true);
-      console.log('Added to wishlist:', product.name);
-      
-      // Optional: Show a success toast/notification
+      if (response.data && response.data.success) {
+        setIsInWishlist(true);
+        console.log('Added to wishlist:', product.name);
+        // Optional: Show a success toast/notification
+      } else {
+        throw new Error(response.data?.message || 'Failed to add to wishlist');
+      }
     } catch (error) {
       console.error('Failed to add to wishlist:', error);
-      setWishlistError('Failed to add to wishlist');
       
-      // Optional: Show an error toast/notification
+      // Handle different error types
+      if (error.response) {
+        // Server responded with an error status code
+        if (error.response.status === 401) {
+          // Token might be expired, redirect to login
+          navigate('/login', { 
+            state: { 
+              from: window.location.pathname,
+              message: 'Your session has expired. Please login again.'
+            } 
+          });
+        } else {
+          setWishlistError(error.response.data?.message || 'Failed to add to wishlist');
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        setWishlistError('Network error. Please try again.');
+      } else {
+        // Something else happened while setting up the request
+        setWishlistError('An error occurred. Please try again.');
+      }
     } finally {
       setIsAddingToWishlist(false);
     }
@@ -172,13 +209,9 @@ const Product = ({
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : isInWishlist ? (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-pink-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                </svg>
+                <Heart className="h-4 w-4 text-pink-500 fill-current" />
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318 1.318a4.5 4.5 0 00-6.364 0z" />
-                </svg>
+                <Heart className="h-4 w-4 text-gray-600" />
               )}
             </button>
           )}

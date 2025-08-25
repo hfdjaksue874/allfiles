@@ -186,7 +186,7 @@ const Navbar = () => {
             <MobileNavLink to="/about">About</MobileNavLink>
             <MobileNavLink to="/contact">Contact</MobileNavLink>
             <li className="border-t border-gray-200 my-2"></li>
-            <MobileNavLink to="/wish">
+            <MobileNavLink to="/wish/:currentUserId">
               <span className="flex items-center gap-2">
                 <Heart size={20} /> Wishlist
               </span>

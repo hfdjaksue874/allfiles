@@ -32,26 +32,75 @@ const registerUser = async (req, res) =>{
  }
 
  const loginUser = async (req, res) => {
-    const {email, password} = req.body;
     try {
-        const user = await User.findOne({email});
-
+        const { email, password } = req.body;
+        
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                error: "Please provide email and password"
+            });
+        }
+        
+        // Find user by email
+        const user = await User.findOne({ email });
+        
         if (!user) {
-            return res.status(400).json({error: 'User not found'});
+            return res.status(401).json({
+                success: false,
+                error: "Invalid email or password"
+            });
         }
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(400).json({error: 'Invalid password'});
+        
+        // Check password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                success: false,
+                error: "Invalid email or password"
+            });
         }
-        const userToken = jwt.sign({_id: user._id}, process.env.JWT_SECRET, {expiresIn: '1h'});
-        res.cookie('userToken', userToken, {httpOnly: true, maxAge: 3600000});
-        res.json({message: 'User logged in successfully', userToken: userToken,id: user._id, name: user.name, email: user.email, token: userToken});
-        } catch (error) {
-            console.error(error);
-            res.status(500).json({error: 'Failed to login user'});
-        }
-
- }
+        
+        // Generate JWT token
+        const token = jwt.sign(
+            { id: user._id, email: user.email, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+        
+        // Set secure cookie options
+        const cookieOptions = {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Important for cross-site requests
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        };
+        
+        // Set cookie
+        res.cookie('token', token, cookieOptions);
+        
+        // Return user info and token
+        res.status(200).json({
+            success: true,
+            message: "Login successful",
+            user: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            },
+            token // Also send token in response body for clients that prefer using Authorization header
+        });
+    } catch (error) {
+        console.error("Login Error:", error);
+        res.status(500).json({
+            success: false,
+            error: "Login failed: " + error.message
+        });
+    }
+ };
 
 const adminLogin = async (req, res) => {
     try {

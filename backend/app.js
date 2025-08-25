@@ -31,6 +31,7 @@ const allowedOrigins = [
   "https://allfiles-f26m.vercel.app"           // Sometimes browser uses 127.0.0.1
 ].filter(Boolean); // remove undefined
 
+
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {

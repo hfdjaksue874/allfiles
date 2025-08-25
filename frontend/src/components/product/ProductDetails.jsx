@@ -102,7 +102,7 @@ const ProductDetails = () => {
   // Function to update product stock in backend
   const updateProductStock = async (productId, newQuantity) => {
     try {
-      const response = await axios.put(`${backendUrl}/api/v1/product/${productId}`, {
+      const response = await axios.put(`${backendUrl}products/${productId}`, {
         quantity: newQuantity,
         stock: newQuantity,
         inStock: newQuantity > 0

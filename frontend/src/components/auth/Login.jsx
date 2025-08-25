@@ -1,8 +1,8 @@
-import axios from 'axios'
-import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { backendUrl } from '../../App'
 import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react'
+import axios from 'axios'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { backendUrl } from '../../App'
+import React, { useState, useEffect } from 'react'
 
 const Login = () => {
   const [email, setEmail] = React.useState('')
@@ -10,7 +10,16 @@ const Login = () => {
   const [showPassword, setShowPassword] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState('')
+  const [message, setMessage] = useState('');
   const navigate = useNavigate()
+  const location = useLocation();
+
+  // Check for redirect message from location state
+  useEffect(() => {
+    if (location.state?.message) {
+      setMessage(location.state.message);
+    }
+  }, [location]);
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -18,21 +27,54 @@ const Login = () => {
     setError('')
 
     try {
+      console.log('Sending login request to:', `${backendUrl}users/login`);
+      console.log('With data:', { email, password });
+      
       const response = await axios.post(`${backendUrl}users/login`, { email, password })
-      console.log('Login successful:', response.data)
+      console.log('Login response received:', response.data);
       
-      // Store user data in localStorage (you can use context/redux for state management)
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token)
-        localStorage.setItem('user', JSON.stringify(response.data.user))
+      // Check if response contains token and user data
+      if (response.data && response.data.token) {
+        // Store token in localStorage
+        localStorage.setItem('token', response.data.token);
+        
+        // Store user data in localStorage (ensure it's a string)
+        if (response.data.user) {
+          const userData = typeof response.data.user === 'string' 
+            ? response.data.user 
+            : JSON.stringify(response.data.user);
+          
+          localStorage.setItem('user', userData);
+          console.log('User data stored in localStorage:', userData);
+        }
+        
+        // Redirect to previous page or home
+        const redirectTo = location.state?.from || '/';
+        navigate(redirectTo);
+        
+        // Show success message
+        alert('Login successful!');
+      } else {
+        throw new Error('Invalid response format. Missing token or user data.');
       }
-      
-      // Redirect to home page or dashboard
-      navigate('/')
-      alert('Login successful!')
     } catch (error) {
-      console.error('Login error:', error)
-      setError(error.response?.data?.message || 'Login failed. Please try again.')
+      console.error('Login error:', error);
+      
+      // Handle different error scenarios
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        setError(error.response.data?.message || 'Login failed. Please check your credentials.');
+        console.error('Server error response:', error.response.data);
+      } else if (error.request) {
+        // The request was made but no response was received
+        setError('No response from server. Please check your internet connection.');
+        console.error('No response received:', error.request);
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        setError(error.message || 'Login failed. Please try again.');
+        console.error('Error setting up request:', error.message);
+      }
     } finally {
       setLoading(false)
     }
@@ -61,6 +103,13 @@ const Login = () => {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
+              </div>
+            )}
+            
+            {/* Message from redirect */}
+            {message && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                {message}
               </div>
             )}
 

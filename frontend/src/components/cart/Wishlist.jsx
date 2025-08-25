@@ -1,24 +1,54 @@
-import axios from 'axios'
-import React, { useState, useEffect } from 'react'
 import { backendUrl } from '../../App'
 import { Link } from 'react-router-dom'
+import axios from 'axios'
+import React, { useState, useEffect } from 'react'
 
 const Wishlist = () => {
   const [wishlistItems, setWishlistItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [user, setUser] = useState(null)
 
   useEffect(() => {
+    // Get user data from localStorage
+    try {
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        setUser(JSON.parse(userData))
+      }
+    } catch (err) {
+      console.error('Error parsing user data:', err)
+    }
+    
     getWishlistItems()
   }, [])
 
   const getWishlistItems = async () => {
     try {
       setLoading(true)
-      // Note: In a real app, you'd get the userId from auth context or similar
-      const userId = "currentUserId" // Replace with actual user ID retrieval
-      const response = await axios.get(`${backendUrl}wishlist/${userId}`)
-      setWishlistItems(response.data)
+      setError(null)
+      
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        setError('Authentication required')
+        setLoading(false)
+        return
+      }
+      
+      const response = await axios.get(`${backendUrl}wishlist`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.data && response.data.success) {
+        setWishlistItems(response.data.wishlist || [])
+      } else {
+        throw new Error(response.data?.message || 'Failed to load wishlist items')
+      }
+      
       setLoading(false)
     } catch (err) {
       setError('Failed to load wishlist items')
@@ -29,9 +59,25 @@ const Wishlist = () => {
 
   const clearAllWishlist = async () => {
     try {
-      // Note: In a real app, you'd include user authentication
-      await axios.delete(`${backendUrl}wishlist/clear`)
-      setWishlistItems([])
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+      
+      const response = await axios.delete(`${backendUrl}wishlist/clear`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.data && response.data.success) {
+        setWishlistItems([])
+      } else {
+        throw new Error(response.data?.message || 'Failed to clear wishlist')
+      }
     } catch (err) {
       setError('Failed to clear wishlist')
       console.error('Error clearing wishlist:', err)
@@ -40,9 +86,26 @@ const Wishlist = () => {
 
   const removeFromWishlist = async (productId) => {
     try {
-      await axios.delete(`${backendUrl}wishlist/${productId}`)
-      // Update local state to remove the item
-      setWishlistItems(wishlistItems.filter(item => item.id !== productId))
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+      
+      const response = await axios.delete(`${backendUrl}wishlist/remove/${productId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.data && response.data.success) {
+        // Update local state to remove the item
+        setWishlistItems(wishlistItems.filter(item => item.productId !== productId))
+      } else {
+        throw new Error(response.data?.message || `Failed to remove item ${productId}`)
+      }
     } catch (err) {
       setError(`Failed to remove item ${productId}`)
       console.error('Error removing from wishlist:', err)
@@ -51,20 +114,63 @@ const Wishlist = () => {
 
   const addToCart = async (productId) => {
     try {
-      // Note: In a real app, you'd include user authentication
-      await axios.post(`${backendUrl}/cart`, { productId, quantity: 1 })
-      // Optionally remove from wishlist after adding to cart
-      // await removeFromWishlist(productId)
+      const token = localStorage.getItem('token')
+      
+      if (!token) {
+        setError('Authentication required')
+        return
+      }
+      
+      const response = await axios.post(`${backendUrl}cart/add`, { 
+        productId, 
+        quantity: 1 
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (response.data && response.data.success) {
+        // Optionally remove from wishlist after adding to cart
+        await removeFromWishlist(productId)
+        alert('Item added to cart successfully!')
+      } else {
+        throw new Error(response.data?.message || 'Failed to add item to cart')
+      }
     } catch (err) {
       setError('Failed to add item to cart')
       console.error('Error adding to cart:', err)
     }
   }
 
+  // Helper function to handle image errors
+  const handleImageError = (e) => {
+    e.target.onerror = null
+    e.target.src = 'https://via.placeholder.com/200x200/f3f4f6/9ca3af?text=No+Image'
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-fuchsia-500"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 max-w-md" role="alert">
+          <p className="font-bold">Error</p>
+          <p>{error}</p>
+          <button 
+            onClick={getWishlistItems}
+            className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     )
   }
@@ -83,12 +189,6 @@ const Wishlist = () => {
         )}
       </div>
 
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
-
       {wishlistItems.length === 0 ? (
         <div className="text-center py-16">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -103,15 +203,16 @@ const Wishlist = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {wishlistItems.map((item) => (
-            <div key={item.id} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+            <div key={item.productId} className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow">
               <div className="relative">
                 <img 
                   src={item.imageUrl} 
                   alt={item.name} 
                   className="w-full h-64 object-cover"
+                  onError={handleImageError}
                 />
                 <button 
-                  onClick={() => removeFromWishlist(item.id)}
+                  onClick={() => removeFromWishlist(item.productId)}
                   className="absolute top-2 right-2 p-1 bg-white rounded-full shadow hover:bg-gray-100"
                   aria-label="Remove from wishlist"
                 >
@@ -125,13 +226,13 @@ const Wishlist = () => {
                 <p className="text-gray-600 mb-2">${item.price.toFixed(2)}</p>
                 <div className="flex space-x-2">
                   <button 
-                    onClick={() => addToCart(item.id)}
+                    onClick={() => addToCart(item.productId)}
                     className="flex-1 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors text-sm"
                   >
                     Add to Cart
                   </button>
                   <Link 
-                    to={`/product/${item.id}`}
+                    to={`/product/${item.productId}`}
                     className="bg-gray-200 text-gray-800 py-2 px-4 rounded hover:bg-gray-300 transition-colors text-sm"
                   >
                     View Details
